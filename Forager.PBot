@@ -1,0 +1,58 @@
+const PBotAPI = Java.type('haven.purus.pbot.PBotAPI');
+const ui = PBotAPI.ui();
+const PBotUtils = Java.type('haven.purus.pbot.PBotUtils');
+const PBotCharacterAPI = Java.type('haven.purus.pbot.PBotCharacterAPI');
+const PBotGobAPI = Java.type('haven.purus.pbot.PBotGobAPI');
+const window = PBotUtils.PBotWindow(ui, "Forager", 70, 200, ScriptID);
+window.addLabel("Picks foragables", 10, 10);
+const btn = window.addButton("btnClick", "Forage", 180, 10, 30);
+
+let stop = false;
+let invSlots = 0;
+let target = null;
+
+function shouldStop() {
+	if (stop) PBotUtils.sysMsg(ui, "Stop!");
+	if (window.closed()) PBotUtils.sysMsg(ui, "Windows closed!");
+	if (freeInvSlots() < 1) PBotUtils.sysMsg(ui, "Inventory Full!");
+	return stop || window.closed() || freeInvSlots() < 1;
+};
+
+const btnClick = () => {
+    stop = false;
+    btn.hide();
+    invSlots = freeInvSlots();
+    while (!shouldStop()) {
+        if (target == null) {
+            target = PBotGobAPI.findGobByNames(ui, 500, "gfx/terobjs/herbs/.*|gfx/kritter/jellyfish/jellyfish");
+            pick(target);
+        }
+        if (target != null && PBotGobAPI.findGobById(ui, target.gob.id) == null) target = null;
+        PBotUtils.sleep(100);
+    }
+	btn.show();
+};
+
+function freeInvSlots() {
+    return PBotUtils.playerInventory(ui).freeSlotsInv();
+}
+
+function inventoryChanged() {
+    if (invSlots != freeInvSlots()) {
+        invSlots = freeInvSlots();
+        return true;
+    } 
+    return false;
+}
+
+function pick(gob) {
+    if (gob != null && PBotGobAPI.findGobById(ui, gob.gob.id) != null && !shouldStop()) {
+        PBotUtils.debugMsg(ui, "Foraging " + gob.getResname() + " at " + gob.getRcCoords())
+        gob.doClick(3, 0);
+        PBotUtils.sleep(250);
+    }
+    else {
+        PBotUtils.sysMsg(ui, "Forage failed!");
+        stop = true;
+    }
+};
