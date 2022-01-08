@@ -122,13 +122,14 @@ function directToPos(pos) {
 
 // White lists
 const FORAGE_LIST = [
+    'bloatedbolete',
     'blueberry',
     'bloodstern',
     'candleberry',
     'cattail',
     'oystermushroom',
     'perfect',
-    'clover',
+    //'clover',
     'chantrelle',
     'chives',
     'dandelion',
@@ -155,6 +156,64 @@ const FORAGE_KRITTER_LIST = [
     'dragonfly',
     'firefly',
     'bogturtle',
+    'forestlizard',
+    //'forestsnail',
+    'frog',
+    //'hen',
+    'rat',
+    //'crab',
+    //'stoat',
+    //'chicken',
+    'stagbeetle',
+    'grasshopper',
+    'ladybug',
+    //'magpie',
+    'moonmoth',
+    'monarchbutterfly',
+    'rabbit',
+    //'sandflea',
+    //'silkmoth',
+    'squirrel',
+    //'toad',
+    //'hedgehog',
+    'waterstrider',
+];
+const FORAGE_KRITTER_STRING = FORAGE_KRITTER_LIST.join("|");
+
+const FORAGE_CURIO_LIST = [
+    //'blueberry',
+    //'bloodstern',
+    //'candleberry',
+    //'cattail',
+    //'oystermushroom',
+    'perfect',
+    //'clover',
+    //'chantrelle',
+    //'chives',
+    'dandelion',
+    //'lingon',
+    'ladysmantle',
+    'mistletoe',
+    //'greenkelp',
+    'frogspawn',
+    'frogscrown',
+    'royaltoadstool',
+    //'rustroot',
+    //'spindlytaproot',
+    //'stingingnettle',
+    //'waybroad',
+    //'windweed',
+    //'yarrow',
+    //'lakesnail',
+    //'clay-gray',
+    //'fairyshroom',
+];
+const FORAGABLE_CURIO_STRING = FORAGE_CURIO_LIST.join("|");
+
+const FORAGE_CURIO_KRITTER_LIST = [
+    'dragonfly',
+    'firefly',
+    'bogturtle',
     //'forestlizard',
     //'forestsnail',
     'frog',
@@ -177,7 +236,7 @@ const FORAGE_KRITTER_LIST = [
     //'hedgehog',
     'waterstrider',
 ];
-const FORAGE_KRITTER_STRING = FORAGE_KRITTER_LIST.join("|");
+const FORAGE_CURIO_KRITTER_STRING = FORAGE_CURIO_KRITTER_LIST.join("|");
 
 const DANGER_GOBS = [
     'adder',
@@ -284,9 +343,15 @@ function finalActions() {
 }
 
 // Gob Search
-const foragableRegX = new RegExp('gfx/terobjs/herbs/(' + FORAGABLE_STRING + ').*');
-const forageKrittersRegX = new RegExp('gfx/kritter/(' + FORAGE_KRITTER_STRING + ').*');
-const dangerKrittersRegX = new RegExp('gfx/kritter/(' + DANGER_GOBS_STRING + ').*');
+let foragableRegX = new RegExp('gfx/terobjs/herbs/(' + FORAGABLE_STRING + ').*');
+let forageKrittersRegX = new RegExp('gfx/kritter/(' + FORAGE_KRITTER_STRING + ').*');
+let dangerKrittersRegX = new RegExp('gfx/kritter/(' + DANGER_GOBS_STRING + ').*');
+
+function setGobRegX() {
+    foragableRegX = new RegExp('gfx/terobjs/herbs/(' + FORAGABLE_STRING + ').*');
+    forageKrittersRegX = new RegExp('gfx/kritter/(' + FORAGE_KRITTER_STRING + ').*');
+}
+
 const distToPlayerSort = (a, b) => {
     if (a == b) {
         return 0;
@@ -380,7 +445,7 @@ function setForageTarget() {
     if (herb) {
         targetGob = herb;
     }
-    else if (kritter) {
+    else if (followKritters && kritter) {
         targetGob = kritter;
     }
 }
