@@ -173,7 +173,6 @@ const FORAGE_KRITTER_LIST = [
     //'sandflea',
     //'silkmoth',
     //'squirrel',
-    'firefly',
     //'toad',
     //'hedgehog',
     'waterstrider',
