@@ -3,56 +3,400 @@ const ui = PBotAPI.ui();
 const PBotUtils = Java.type('haven.purus.pbot.PBotUtils');
 const PBotCharacterAPI = Java.type('haven.purus.pbot.PBotCharacterAPI');
 const PBotGobAPI = Java.type('haven.purus.pbot.PBotGobAPI');
-const window = PBotUtils.PBotWindow(ui, "Forager", 70, 200, ScriptID);
-window.addLabel("Picks foragables", 10, 10);
-const btn = window.addButton("btnClick", "Forage", 180, 10, 30);
 
+// #region Setup Window
+const window = PBotUtils.PBotWindow(ui, "Forager", 100, 200, ScriptID);
+window.addLabel("auto-foraging script (avoids aggressive animals)", 10, 10);
+const startBtn = window.addButton("onStart", "Forage", 180, 10, 60);
+
+const TICK_RATE = 200; // set script to run ever 200ms
 let stop = false;
-let invSlots = 0;
-let target = null;
+let stopMsg = "Stop!";
 
-function shouldStop() {
-	if (stop) PBotUtils.sysMsg(ui, "Stop!");
-	if (window.closed()) PBotUtils.sysMsg(ui, "Windows closed!");
-	if (freeInvSlots() < 1) PBotUtils.sysMsg(ui, "Inventory Full!");
-	return stop || window.closed() || freeInvSlots() < 1;
-};
-
-const btnClick = () => {
-    stop = false;
-    btn.hide();
-    invSlots = freeInvSlots();
-    while (!shouldStop()) {
-        if (target == null) {
-            target = PBotGobAPI.findGobByNames(ui, 500, "gfx/terobjs/herbs/.*|gfx/kritter/jellyfish/jellyfish");
-            pick(target);
-        }
-        if (target != null && PBotGobAPI.findGobById(ui, target.gob.id) == null) target = null;
-        PBotUtils.sleep(100);
+// All conditions that should halt script
+function shouldStop(silent = false) {
+	if (!silent) {
+        if (stop) PBotUtils.sysMsg(ui, stopMsg);
+	    if (window.closed()) PBotUtils.sysMsg(ui, "Script Window closed!");
     }
-	btn.show();
+	return stop || window.closed();
 };
+
+// Start script
+const onStart = () => {
+    stop = false;
+    stopMsg = "Stop!";
+    startBtn.hide();
+
+    while (!shouldStop()) {
+        mainTick();
+        PBotUtils.sleep(TICK_RATE)
+    }
+
+	startBtn.show();
+};
+
+// /\ Boiler plate above /\
+// #endregion
+
+const DEBUG = true;
+function debug(msg) {
+    if (!DEBUG) {
+        return;
+    }
+    PBotUtils.debugMsg(ui, msg);
+}
+
+// #region Helper functions
+// Helper Classes
+const Coord2d = Java.type('haven.Coord2d');
+
+function getRandomNumber(min, max) { return Math.random() * (max - min) + min };
+
+function getPlayer() {
+    return PBotGobAPI.player(ui);
+}
+
+function isIdle(player) {
+    return PBotUtils.getHourglass(ui) == -1 && !getPlayer().isMoving();
+}
 
 function freeInvSlots() {
     return PBotUtils.playerInventory(ui).freeSlotsInv();
 }
 
-function inventoryChanged() {
-    if (invSlots != freeInvSlots()) {
-        invSlots = freeInvSlots();
-        return true;
-    } 
-    return false;
+function setSpeed(speed) {
+    if (PBotUtils.maxSpeed(ui) >= speed) {
+        PBotUtils.setSpeed(ui, speed);
+    }
 }
 
-function pick(gob) {
-    if (gob != null && PBotGobAPI.findGobById(ui, gob.gob.id) != null && !shouldStop()) {
-        PBotUtils.debugMsg(ui, "Foraging " + gob.getResname() + " at " + gob.getRcCoords())
-        gob.doClick(3, 0);
-        PBotUtils.sleep(250);
+function staminaBelow(value) {
+    return PBotCharacterAPI.getStamina(ui) < value;
+}
+
+let allowDrink = true;
+function drink() {
+    if (allowDrink && PBotUtils.getHourglass(ui) == -1) {
+        PBotUtils.drink(ui, false);
     }
-    else {
-        PBotUtils.sysMsg(ui, "Forage failed!");
+}
+
+function gobExists(gob) {
+    return gob != null && PBotGobAPI.findGobById(ui, gob.getGobId()) != null;
+}
+
+function pfmove(gob) {
+    if (gob != null) {
+        let pos = gob.getRcCoords();
+        PBotUtils.pfmove(ui, pos.x - 10, pos.y - 10);
+    }
+}
+
+function directmove(gob) {
+    if (gob != null) {
+        let pos = gob.getRcCoords();
+        PBotUtils.mapClick(ui, pos.x, pos.y, 1, 0);
+    }
+}
+
+function rightClick(gob) {
+    if (gob != null) {
+        gob.doClick(3, 0);
+    }
+}
+
+function pfToPos(pos) {
+    if (pos != null) {
+        PBotUtils.pfmove(ui, pos.x - 10, pos.y - 10);
+    }
+}
+
+function directToPos(pos) {
+    if (pos != null) {
+        PBotUtils.mapClick(ui, pos.x, pos.y, 1, 0);
+    }
+}
+
+// #endregion
+
+// White lists
+const FORAGE_LIST = [
+    'blueberry',
+    'bloodstern',
+    'candleberry',
+    'cattail',
+    'oystermushroom',
+    'perfect',
+    'clover',
+    'chantrelle',
+    'chives',
+    'dandelion',
+    'lingon',
+    'ladysmantle',
+    'mistletoe',
+    'greenkelp',
+    'frogspawn',
+    'frogscrown',
+    'royaltoadstool',
+    'rustroot',
+    'spindlytaproot',
+    'stingingnettle',
+    'waybroad',
+    'windweed',
+    'yarrow',
+    'lakesnail',
+    'clay-gray',
+    'fairyshroom',
+];
+const FORAGABLE_STRING = FORAGE_LIST.join("|");
+
+const FORAGE_KRITTER_LIST = [
+    'dragonfly',
+    'firefly',
+    'bogturtle',
+    //'forestlizard',
+    //'forestsnail',
+    'frog',
+    //'hen',
+    //'rat',
+    //'crab',
+    //'stoat',
+    //'chicken',
+    'stagbeetle',
+    'grasshopper',
+    'ladybug',
+    //'magpie',
+    'moonmoth',
+    'monarchbutterfly',
+    //'rabbit',
+    //'sandflea',
+    //'silkmoth',
+    //'squirrel',
+    'firefly',
+    //'toad',
+    //'hedgehog',
+    'waterstrider',
+];
+const FORAGE_KRITTER_STRING = FORAGE_KRITTER_LIST.join("|");
+
+const DANGER_GOBS = [
+    'adder',
+    'badger',
+    'bat',
+    'bear',
+    'boreworm',
+    'boar',
+    'caveangler',
+    'caverat',
+    'lynx',
+    'midgeswarm',
+    'moose',
+    `mammoth`,
+    'orca',
+    'sandflea',
+    'troll',
+    'walrus',
+    'wildgoat',
+    'wolf',
+    'wolverine',
+];
+const DANGER_GOBS_STRING = DANGER_GOBS.join("|");
+
+// Const
+const SCAN_RADIUS = 550;
+const DANGER_DIST = 330;
+
+// Fields
+let curiosOnly = false;
+let followKritters = false;
+
+// General info
+let player = null;
+let playerPos = null;
+let availableInv = freeInvSlots();
+
+// Flags
+let idle = isIdle();
+let avoiding = false;
+let waitForEnergy = false;
+
+let targetPos = null;
+let targetGob = null;
+let gobs = null;
+
+// this is a tick function controlled in the main() loop above
+function mainTick() {
+    // update general info //
+    player = getPlayer();
+    playerPos = player.getRcCoords();
+    availableInv = freeInvSlots();
+    // flags
+    idle = isIdle();
+
+    // Behavior //
+    // find all relevant gobs
+    gobs = searchGobs();
+
+    let dangerGobs = checkDangerGobs();
+    avoiding = dangerGobs.length > 0;
+    if (avoiding) {
+        setSpeed(2); // Run
+        avoid(dangerGobs);
+    }
+    else if (idle) {
+        setSpeed(1); // Walk
+        let oldGob = targetGob;
+        setForageTarget();
+
+        if (gobExists(oldGob) || targetGob == null) {
+            randomWalk();
+            targetGob = gobExists(oldGob) ? null : targetGob;
+        }
+        else {
+            forage(targetGob);
+        }               
+    }
+    
+
+    manageStamina();
+
+    // end condition check//
+    if (taskComplete()) {
+        finalActions();
         stop = true;
     }
-};
+}
+
+function manageStamina() {
+    if (staminaBelow(60)) {
+        drink();
+    }
+}
+
+// Is the task complete?
+function taskComplete() {
+    return availableInv < 1;
+}
+
+// Any last actions to take before ending script
+function finalActions() {    
+    PBotCharacterAPI.cancelAct(ui);
+}
+
+// Gob Search
+const foragableRegX = new RegExp('gfx/terobjs/herbs/(' + FORAGABLE_STRING + ').*');
+const forageKrittersRegX = new RegExp('gfx/kritter/(' + FORAGE_KRITTER_STRING + ').*');
+const dangerKrittersRegX = new RegExp('gfx/kritter/(' + DANGER_GOBS_STRING + ').*');
+const distToPlayerSort = (a, b) => {
+    if (a == b) {
+        return 0;
+    }
+
+    if (a == null) {
+        return 1;
+    }
+
+    if (b == null) {
+        return -1;
+    }
+
+    const distA = a.getRcCoords().dist(playerPos);
+    const distB = b.getRcCoords().dist(playerPos);
+    return distA - distB;
+} 
+function searchGobs() {
+    let foragables = [];
+    let forageKritters = [];
+    let dangerKritters = [];
+
+    let gobs = PBotGobAPI.getGobsInRadius(ui, SCAN_RADIUS);
+    for (let gob of gobs) {
+        if (gob != null) {
+            let name = gob.getResname();
+            if (name != null) {
+                if (name.search(foragableRegX) != -1) {
+                    foragables.push(gob);
+                }
+                if (name.search(forageKrittersRegX) != -1) {
+                    forageKritters.push(gob);
+                }
+                if (name.search(dangerKrittersRegX) != -1) {
+                    dangerKritters.push(gob);
+                }
+            }
+        }
+    }
+
+    foragables.sort(distToPlayerSort);
+    forageKritters.sort(distToPlayerSort);
+    dangerKritters.sort(distToPlayerSort);
+
+    return {
+        foragables,
+        kritters: {
+            forage: forageKritters,
+            danger: dangerKritters,
+        }
+    }
+}
+// output list of dangerous gobs close to player
+function checkDangerGobs() {
+    let dangerGobs = [];
+    for (let gob of gobs.kritters.danger) {
+        let dist = gob.getRcCoords().dist(playerPos);
+        if (dist <= DANGER_DIST) {
+            dangerGobs.push({
+                dist,
+                gob,
+            });
+        }
+    }
+    return dangerGobs;
+}
+
+const AVOID_PERIOD = 250;
+const CLICK_DIST = 70;
+// Avoid dangerous gobs that are too close
+function avoid(dangers) {
+    // Build avoidance vector
+    let vector = new Coord2d();
+    for (let danger of dangers) {
+        let avoidVec = playerPos.sub(danger.gob.getRcCoords());
+        // add normalized & scaled
+        vector = vector.add(avoidVec.mul(Math.max(0, (DANGER_DIST - danger.dist)) / avoidVec.abs()));
+    }
+    // Normalize & scale
+    targetPos = playerPos.add(vector.mul(CLICK_DIST / vector.abs()));
+    directToPos(targetPos);
+    PBotUtils.sleep(AVOID_PERIOD);
+}
+
+// find foragable target
+function setForageTarget() {
+    targetGob = null;
+    let herb = gobs.foragables[0];
+    let kritter = gobs.kritters.forage[0];
+
+    if (herb) {
+        targetGob = herb;
+    }
+    else if (kritter) {
+        targetGob = kritter;
+    }
+}
+
+// collect foragables
+function forage(gob) {
+    rightClick(gob);
+}
+
+const WALK_DIST = 190;
+function randomWalk() {
+    let angle = getRandomNumber(0, 6.3);
+    let vec = new Coord2d(1, 0);
+    vec = vec.rotate(angle);
+    targetPos = playerPos.add(vec.mul(WALK_DIST));
+    directToPos(targetPos);
+}
+

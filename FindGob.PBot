@@ -1,0 +1,82 @@
+const PBotAPI = Java.type('haven.purus.pbot.PBotAPI');
+const ui = PBotAPI.ui();
+const PBotUtils = Java.type('haven.purus.pbot.PBotUtils');
+const PBotCharacterAPI = Java.type('haven.purus.pbot.PBotCharacterAPI');
+const PBotGobAPI = Java.type('haven.purus.pbot.PBotGobAPI');
+
+// Setup Window
+const window = PBotUtils.PBotWindow(ui, "Find Gob", 150, 200, ScriptID);
+window.addLabel("Enter a gob name to search for:", 10, 10);
+const textEntry = window.addTextEntry(180, "gob/gob", 10, 30);
+const label = window.addLabel("Gob not found!", 10, 60)
+const startBtn = window.addButton("onStart", "Search", 180, 10, 90);
+const moveButton = window.addButton("onMove", "Move to gob", 180, 10, 120);
+
+const TICK_RATE = 200; // set script to run ever 200ms
+let stop = false;
+let stopMsg = "Stop!";
+
+// All conditions that should halt script
+function shouldStop(silent = false) {
+	if (!silent) {
+        if (stop) PBotUtils.sysMsg(ui, stopMsg);
+	    if (window.closed()) PBotUtils.sysMsg(ui, "Script Window closed!");
+    }
+	return stop || window.closed();
+};
+
+// Start script
+const onStart = () => {
+    stop = false;
+    stopMsg = "Stop!";
+    startBtn.hide();
+
+    while (!shouldStop(true)) {
+        mainTick();
+        PBotUtils.sleep(TICK_RATE)
+    }
+
+	startBtn.show();
+};
+
+// /\ Boiler plate above /\
+
+function pfmove(gob) {
+    if (gob != null) {
+        let pos = gob.getRcCoords();
+        PBotUtils.pfmove(ui, pos.x - 10, pos.y - 10);
+    }
+}
+
+function directmove(gob) {
+    if (gob != null) {
+        let pos = gob.getRcCoords();
+        PBotUtils.mapClick(ui, pos.x, pos.y, 1, 0);
+    }
+}
+
+// Const
+const SEARCH_RADIUS = 600;
+
+// Fields
+let foundGob = null;
+
+const onMove = () => {
+    directmove(foundGob);
+}
+
+// this is a tick function controlled in a loop above
+function mainTick() {
+    label.setText("Gob not found!");
+    foundGob = null;
+    let gobs = PBotGobAPI.getGobsInRadius(ui, SEARCH_RADIUS);
+    for (let gob of gobs) {
+        if (gob.getResname() && gob.getResname().includes(textEntry.getText())) {
+            label.setText("Found! - " + gob.getResname());
+            foundGob = gob;
+            break;
+        }
+    }
+
+    stop = true;
+}

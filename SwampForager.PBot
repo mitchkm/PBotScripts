@@ -1,0 +1,244 @@
+const PBotAPI = Java.type('haven.purus.pbot.PBotAPI');
+const ui = PBotAPI.ui();
+const PBotUtils = Java.type('haven.purus.pbot.PBotUtils');
+const PBotCharacterAPI = Java.type('haven.purus.pbot.PBotCharacterAPI');
+const PBotGobAPI = Java.type('haven.purus.pbot.PBotGobAPI');
+
+// Setup Window
+const window = PBotUtils.PBotWindow(ui, "Forager", 100, 200, ScriptID);
+window.addLabel("auto-foraging script (avoids aggressive animals)", 10, 10);
+const startBtn = window.addButton("onStart", "Forage", 180, 10, 60);
+
+const TICK_RATE = 200; // set script to run ever 200ms
+let stop = false;
+let stopMsg = "Stop!";
+
+// All conditions that should halt script
+function shouldStop(silent = false) {
+	if (!silent) {
+        if (stop) PBotUtils.sysMsg(ui, stopMsg);
+	    if (window.closed()) PBotUtils.sysMsg(ui, "Script Window closed!");
+    }
+	return stop || window.closed();
+};
+
+// Start script
+const onStart = () => {
+    stop = false;
+    stopMsg = "Stop!";
+    startBtn.hide();
+
+    while (!shouldStop()) {
+        mainTick();
+        PBotUtils.sleep(TICK_RATE)
+    }
+
+	startBtn.show();
+};
+
+// /\ Boiler plate above /\
+
+const DEBUG = true;
+function debug(msg) {
+    if (!DEBUG) {
+        return;
+    }
+    PBotUtils.debugMsg(ui, msg);
+}
+
+// Helper functions
+function getPlayer() {
+    return PBotGobAPI.player(ui);
+}
+
+function getPlayerCoords() {
+    return getPlayer().getRcCoords();
+}
+
+function isIdle() {
+    return PBotUtils.getHourglass(ui) == -1 && !getPlayer().isMoving();
+}
+
+function freeInvSlots() {
+    return PBotUtils.playerInventory(ui).freeSlotsInv();
+}
+
+function pfmove(gob) {
+    if (gob != null) {
+        let pos = gob.getRcCoords();
+        PBotUtils.pfmove(ui, pos.x - 10, pos.y - 10);
+    }
+}
+
+function directmove(gob) {
+    if (gob != null) {
+        let pos = gob.getRcCoords();
+        PBotUtils.mapClick(ui, pos.x, pos.y, 1, 0);
+    }
+}
+
+function rightClick(gob) {
+    if (gob != null) {
+        gob.doClick(3, 0);
+    }
+}
+
+// White lists
+const FORAGE_LIST = [
+    //'blueberry',
+    //'bloodstern',
+    'candleberry',
+    //'cattail',
+    //'oystermushroom',
+    //'perfect',
+    //'clover',
+    //'chantrelle',
+    //'chives',
+    //'dandelion',
+    //'lingon',
+    'ladysmantle',
+    //'mistletoe',
+    //'greenkelp',
+    //'frogspawn',
+    'royaltoadstool',
+    'frogscrown',
+    //'rustroot',
+    //'spindlytaproot',
+    //'stingingnettle',
+    //'waybroad',
+    //'windweed',
+    //'yarrow',
+    //'lakesnail',
+    //'clay-gray',
+    //'fairyshroom',
+];
+const FORAGABLE_STRING = FORAGE_LIST.join("|");
+
+const FORAGE_KRITTER_LIST = [
+    'dragonfly',
+    //'firefly',
+    //'bogturtle',
+    //'forestlizard',
+    //'forestsnail',
+    //'frog',
+    //'hen',
+    //'rat',
+    //'crab',
+    //'stoat',
+    //'chicken',
+    'stagbeetle',
+    //'grasshopper',
+    'ladybug',
+    //'magpie',
+    //'moonmoth',
+    'monarchbutterfly',
+    //'rabbit',
+    //'sandflea',
+    //'silkmoth',
+    //'squirrel',
+    //'firefly',
+    //'toad',
+    //'hedgehog',
+    //'waterstrider',
+];
+const FORAGE_KRITTER_STRING = FORAGE_KRITTER_LIST.join("|");
+
+const DANGER_GOBS = [
+    'adder',
+    'badger',
+    'bat',
+    'bear',
+    'boreworm',
+    'boar',
+    'caveangler',
+    'caverat',
+    'lynx',
+    'midgeswarm',
+    'moose',
+    `mammoth`,
+    'orca',
+    'sandflea',
+    'troll',
+    'walrus',
+    'wildgoat',
+    'wolf',
+    'wolverine',
+];
+const DANGER_GOBS_STRING = DANGER_GOBS.join("|");
+
+// Const
+const SCAN_RADIUS = 550;
+const DANGER_DIST = 350;
+
+// Fields
+let targetLoc = null;
+
+// this is a tick function controlled in a loop above
+function mainTick() {
+    if (isIdle()) {
+        let gobs = searchGobs();
+        if (gobs.kritters.forage.length > 0) {
+            rightClick(gobs.kritters.forage[0]);
+        }
+    }
+}
+
+// Gob Search
+const foragableRegX = new RegExp('gfx/terobjs/herbs/(' + FORAGABLE_STRING + ').*');
+const forageKrittersRegX = new RegExp('gfx/kritter/(' + FORAGE_KRITTER_STRING + ').*');
+const dangerKrittersRegX = new RegExp('gfx/kritter/(' + DANGER_GOBS_STRING + ').*');
+const distToPlayerSort = (a, b) => {
+    if (a == b) {
+        return 0;
+    }
+
+    if (a == null) {
+        return 1;
+    }
+
+    if (b == null) {
+        return -1;
+    }
+
+    const playerCoord = getPlayerCoords();
+
+    const distA = a.getRcCoords().dist(playerCoord);
+    const distB = b.getRcCoords().dist(playerCoord);
+    return distA - distB;
+} 
+function searchGobs() {
+    let foragables = [];
+    let forageKritters = [];
+    let dangerKritters = [];
+
+    let gobs = PBotGobAPI.getGobsInRadius(ui, SCAN_RADIUS);
+    for (let gob of gobs) {
+        if (gob != null) {
+            let name = gob.getResname();
+            if (name != null) {
+                if (name.search(foragableRegX) != -1) {
+                    foragables.push(gob);
+                }
+                if (name.search(forageKrittersRegX) != -1) {
+                    forageKritters.push(gob);
+                }
+                if (name.search(dangerKrittersRegX) != -1) {
+                    dangerKritters.push(gob);
+                }
+            }
+        }
+    }
+
+    foragables.sort(distToPlayerSort);
+    forageKritters.sort(distToPlayerSort);
+    dangerKritters.sort(distToPlayerSort);
+
+    return {
+        foragables,
+        kritters: {
+            forage: forageKritters,
+            danger: dangerKritters,
+        }
+    }
+}
+
